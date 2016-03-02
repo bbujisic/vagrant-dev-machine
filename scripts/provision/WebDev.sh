@@ -6,6 +6,7 @@ DBHOST=localhost
 DBNAME=db
 DBUSER=root
 DBPASSWD=root
+DBDUMP="/var/www/html/db.sql"
 
 #  > /dev/null 2>&1
 
@@ -23,7 +24,7 @@ sudo add-apt-repository -y ppa:brianmercer/php5-xhprof > /dev/null 2>&1
 sudo add-apt-repository -y ppa:brightbox/ruby-ng > /dev/null 2>&1
 sudo add-apt-repository -y ppa:chris-lea/node.js > /dev/null 2>&1
 sudo apt-get update > /dev/null 2>&1
-sudo add-apt-repository -y ppa:ondrej/php5-5.6
+sudo add-apt-repository -y ppa:ondrej/php5-5.6 > /dev/null 2>&1
 sudo apt-get update > /dev/null 2>&1
 
 echo "mysql-server mysql-server/root_password password $DBPASSWD" | debconf-set-selections
@@ -52,13 +53,30 @@ pecl install -y memcached > /dev/null 2>&1
 echo -e "\n--- Downloading and setting up UploadProgress ---\n"
 sudo pecl install -Z uploadprogress > /dev/null 2>&1
 
-echo -e "\n--- Creating MySQL root user and db ---\n"
+echo -e "\n--- Creating MySQL root user and db. ---\n"
 mysql -uroot -p$DBPASSWD -e "CREATE DATABASE $DBNAME"
 mysql -uroot -p$DBPASSWD -e "grant all privileges on $DBNAME.* to '$DBUSER'@'localhost' identified by '$DBPASSWD'"
+if [ -f "$DBDUMP" ]
+then
+    echo -e "\n--- Importing provided database dump. ---\n"
+    mysql -uroot -p$DBPASSWD $DBNAME < $DBDUMP
+fi
+
+echo -e "\n--- Installing Composer and Drush ---\n"
+php -r "readfile('https://getcomposer.org/installer');" > composer-setup.php
+php -r "if (hash('SHA384', file_get_contents('composer-setup.php')) === 'fd26ce67e3b237fffd5e5544b45b0d92c41a4afe3e3f778e942e43ce6be197b9cdc7c251dcde6e2a52297ea269370680') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); }"
+php composer-setup.php
+php -r "unlink('composer-setup.php');"
+sudo mv composer.phar /usr/local/bin/composer
+
+wget http://files.drush.org/drush.phar
+php drush.phar core-status
+chmod +x drush.phar
+sudo mv drush.phar /usr/local/bin/drush
+drush init
 
 echo -e "\n--- Finalizing setup ---\n"
 sudo apt-get upgrade > /dev/null 2>&1
-
 echo "short_open_tag = On" >> /etc/php5/apache2/php.ini
 echo "display_errors = On" >> /etc/php5/apache2/php.ini
 echo "display_startup_errors = On" >> /etc/php5/apache2/php.ini
